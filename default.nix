@@ -388,7 +388,7 @@ let
   };
 
   interfaceStartScript = interface: icfg: ips: routes4: routes6: ''
-    ${icfg.extraInitCommands or ""}
+    ${icfg.extraInitCommands}
 
     state="/run/nixos/network/addresses/${interface}"
     mkdir -p $(dirname "$state")
@@ -585,6 +585,15 @@ in
           options.parent = lib.mkOption {
             description = "Parent interface of this vlan";
             type = lib.types.str;
+          };
+          options.extraInitCommands = lib.mkOption {
+            description = "Extra commands for interface initialization to be executed before bridge/address configuration.";
+            default = "";
+            example = lib.literalExpression ''
+              '''
+                ''${pkgs.ethtool}/bin/ethtool --offload eth0 tso off
+              ''''';
+            type = lib.types.lines;
           };
           options.ipv4 = lib.mkOption {
             description = "IPv4 config";
