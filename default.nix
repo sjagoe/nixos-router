@@ -146,6 +146,231 @@ let
     };
   };
 
+  ipv6OptionsType = {
+    options.enableForwarding = lib.mkEnableOption "Enable IPv6 forwarding for this device";
+    options.addresses = lib.mkOption {
+      description = "Device's IPv6 addresses";
+      default = [ ];
+      type = lib.types.listOf (
+        lib.types.submodule {
+          options.address = lib.mkOption {
+            description = "IPv6 address";
+            type = router-lib.types.ipv6;
+          };
+          options.prefixLength = lib.mkOption {
+            description = "IPv6 prefix length";
+            type = lib.types.int;
+          };
+          options.assign = lib.mkOption {
+            description = "Whether to assign this address to the device. Default: no if the first hextet is zero, yes otherwise";
+            type = with lib.types; nullOr bool;
+            default = null;
+          };
+          options.gateways = lib.mkOption {
+            description = "IPv6 gateways information (optional)";
+            default = [ ];
+            type =
+              with lib.types;
+              listOf (
+                either router-lib.types.ipv6 (submodule {
+                  options.address = lib.mkOption {
+                    description = "Gateway's IPv6 address";
+                    type = router-lib.types.ipv6;
+                  };
+                  options.prefixLength = lib.mkOption {
+                    description = "Gateway's IPv6 prefix length (defaults to interface address's prefix length)";
+                    type = nullOr int;
+                    default = null;
+                  };
+                  options.radvdSettings = lib.mkOption {
+                    default = { };
+                    type = attrsOf (oneOf [
+                      bool
+                      str
+                      int
+                    ]);
+                    example = {
+                      AdvRoutePreference = "high";
+                    };
+                    description = "radvd prefix-specific route settings";
+                  };
+                  options.coreradSettings = lib.mkOption {
+                    default = { };
+                    type = (pkgs.formats.toml { }).type;
+                    example = {
+                      preference = "high";
+                    };
+                    description = "CoreRAD prefix-specific route settings";
+                  };
+                })
+              );
+          };
+          options.dns = lib.mkOption {
+            description = "IPv6 DNS servers associated with this device";
+            type =
+              with lib.types;
+              listOf (
+                either str (submodule {
+                  options.address = lib.mkOption {
+                    description = "DNS server's address";
+                    type = lib.types.str;
+                  };
+                  options.radvdSettings = lib.mkOption {
+                    default = { };
+                    type = attrsOf (oneOf [
+                      bool
+                      str
+                      int
+                    ]);
+                    example = {
+                      FlushRDNSS = false;
+                    };
+                    description = "radvd prefix-specific RDNSS settings";
+                  };
+                  options.coreradSettings = lib.mkOption {
+                    default = { };
+                    type = (pkgs.formats.toml { }).type;
+                    example = {
+                      lifetime = "auto";
+                    };
+                    description = "CoreRAD prefix-specific RDNSS settings";
+                  };
+                })
+              );
+            default = [ ];
+          };
+          options.keaSettings = lib.mkOption {
+            default = { };
+            type = (pkgs.formats.json { }).type;
+            example = {
+              pools = [
+                {
+                  pool = "fd01:: - fd01::ffff:ffff:ffff:ffff";
+                }
+              ];
+              option-data = [
+                {
+                  name = "dns-servers";
+                  code = 23;
+                  csv-format = true;
+                  space = "dhcp6";
+                  data = "aaaa::, bbbb::";
+                }
+              ];
+            };
+            description = "Kea prefix-specific settings";
+          };
+          options.radvdSettings = lib.mkOption {
+            default = { };
+            type =
+              with lib.types;
+              attrsOf (oneOf [
+                bool
+                str
+                int
+              ]);
+            example = {
+              AdvOnLink = true;
+              AdvAutonomous = true;
+              Base6to4Interface = "ppp0";
+            };
+            description = "radvd prefix-specific settings";
+          };
+          options.coreradSettings = lib.mkOption {
+            default = { };
+            type = (pkgs.formats.toml { }).type;
+            example = {
+              on_link = true;
+              autonomous = true;
+            };
+            description = "CoreRAD prefix-specific settings";
+          };
+        }
+      );
+    };
+    options.routes = lib.mkOption {
+      description = "IPv6 routes added when this device starts";
+      default = [ ];
+      type = lib.types.listOf (
+        lib.types.submodule {
+          options.extraArgs = lib.mkOption {
+            description = "Route args, i.e. everything after \"ip route add\"";
+            type = with lib.types; either str (listOf anything);
+          };
+        }
+      );
+    };
+    options.kea = lib.mkOption {
+      description = "Kea options";
+      default = { };
+      type = lib.types.submodule {
+        options.enable = lib.mkEnableOption "Kea for IPv6";
+        options.extraArgs = lib.mkOption {
+          type = with lib.types; listOf str;
+          default = [ ];
+          description = "List of additional arguments to pass to the daemon.";
+        };
+        options.configFile = lib.mkOption {
+          type = with lib.types; nullOr path;
+          default = null;
+          description = "Kea config file (takes precedence over settings)";
+        };
+        options.settings = lib.mkOption {
+          default = { };
+          type = (pkgs.formats.json { }).type;
+          description = "Kea settings";
+        };
+      };
+    };
+    options.radvd = lib.mkOption {
+      description = "radvd options";
+      default = { };
+      type = lib.types.submodule {
+        options.enable = lib.mkEnableOption "radvd";
+        options.interfaceSettings = lib.mkOption {
+          default = { };
+          type =
+            with lib.types;
+            attrsOf (oneOf [
+              bool
+              str
+              int
+            ]);
+          example = {
+            UnicastOnly = true;
+          };
+          description = "radvd interface-specific settings";
+        };
+      };
+    };
+    options.corerad = lib.mkOption {
+      description = "CoreRAD options";
+      default = { };
+      type = lib.types.submodule {
+        options.enable = lib.mkEnableOption "CoreRAD";
+        options.configFile = lib.mkOption {
+          type = with lib.types; nullOr path;
+          default = null;
+          description = "CoreRAD config file (takes precedence over settings)";
+        };
+        options.interfaceSettings = lib.mkOption {
+          default = { };
+          type = (pkgs.formats.toml { }).type;
+          description = "CoreRAD interface-specific settings";
+        };
+        options.settings = lib.mkOption {
+          default = { };
+          type = (pkgs.formats.toml { }).type;
+          example = {
+            debug.address = "localhost:9430";
+            debug.prometheus = true;
+          };
+          description = "General CoreRAD settings";
+        };
+      };
+    };
+  };
+
   # a set of { <bridgeName> = [ <bridge interfaces> ]; }
   bridges = lib.zipAttrs (
     lib.mapAttrsToList (
@@ -384,230 +609,7 @@ in
           options.ipv6 = lib.mkOption {
             description = "IPv6 config";
             default = { };
-            type = lib.types.submodule {
-              options.enableForwarding = lib.mkEnableOption "Enable IPv6 forwarding for this device";
-              options.addresses = lib.mkOption {
-                description = "Device's IPv6 addresses";
-                default = [ ];
-                type = lib.types.listOf (
-                  lib.types.submodule {
-                    options.address = lib.mkOption {
-                      description = "IPv6 address";
-                      type = router-lib.types.ipv6;
-                    };
-                    options.prefixLength = lib.mkOption {
-                      description = "IPv6 prefix length";
-                      type = lib.types.int;
-                    };
-                    options.assign = lib.mkOption {
-                      description = "Whether to assign this address to the device. Default: no if the first hextet is zero, yes otherwise";
-                      type = with lib.types; nullOr bool;
-                      default = null;
-                    };
-                    options.gateways = lib.mkOption {
-                      description = "IPv6 gateways information (optional)";
-                      default = [ ];
-                      type =
-                        with lib.types;
-                        listOf (
-                          either router-lib.types.ipv6 (submodule {
-                            options.address = lib.mkOption {
-                              description = "Gateway's IPv6 address";
-                              type = router-lib.types.ipv6;
-                            };
-                            options.prefixLength = lib.mkOption {
-                              description = "Gateway's IPv6 prefix length (defaults to interface address's prefix length)";
-                              type = nullOr int;
-                              default = null;
-                            };
-                            options.radvdSettings = lib.mkOption {
-                              default = { };
-                              type = attrsOf (oneOf [
-                                bool
-                                str
-                                int
-                              ]);
-                              example = {
-                                AdvRoutePreference = "high";
-                              };
-                              description = "radvd prefix-specific route settings";
-                            };
-                            options.coreradSettings = lib.mkOption {
-                              default = { };
-                              type = (pkgs.formats.toml { }).type;
-                              example = {
-                                preference = "high";
-                              };
-                              description = "CoreRAD prefix-specific route settings";
-                            };
-                          })
-                        );
-                    };
-                    options.dns = lib.mkOption {
-                      description = "IPv6 DNS servers associated with this device";
-                      type =
-                        with lib.types;
-                        listOf (
-                          either str (submodule {
-                            options.address = lib.mkOption {
-                              description = "DNS server's address";
-                              type = lib.types.str;
-                            };
-                            options.radvdSettings = lib.mkOption {
-                              default = { };
-                              type = attrsOf (oneOf [
-                                bool
-                                str
-                                int
-                              ]);
-                              example = {
-                                FlushRDNSS = false;
-                              };
-                              description = "radvd prefix-specific RDNSS settings";
-                            };
-                            options.coreradSettings = lib.mkOption {
-                              default = { };
-                              type = (pkgs.formats.toml { }).type;
-                              example = {
-                                lifetime = "auto";
-                              };
-                              description = "CoreRAD prefix-specific RDNSS settings";
-                            };
-                          })
-                        );
-                      default = [ ];
-                    };
-                    options.keaSettings = lib.mkOption {
-                      default = { };
-                      type = (pkgs.formats.json { }).type;
-                      example = {
-                        pools = [
-                          {
-                            pool = "fd01:: - fd01::ffff:ffff:ffff:ffff";
-                          }
-                        ];
-                        option-data = [
-                          {
-                            name = "dns-servers";
-                            code = 23;
-                            csv-format = true;
-                            space = "dhcp6";
-                            data = "aaaa::, bbbb::";
-                          }
-                        ];
-                      };
-                      description = "Kea prefix-specific settings";
-                    };
-                    options.radvdSettings = lib.mkOption {
-                      default = { };
-                      type =
-                        with lib.types;
-                        attrsOf (oneOf [
-                          bool
-                          str
-                          int
-                        ]);
-                      example = {
-                        AdvOnLink = true;
-                        AdvAutonomous = true;
-                        Base6to4Interface = "ppp0";
-                      };
-                      description = "radvd prefix-specific settings";
-                    };
-                    options.coreradSettings = lib.mkOption {
-                      default = { };
-                      type = (pkgs.formats.toml { }).type;
-                      example = {
-                        on_link = true;
-                        autonomous = true;
-                      };
-                      description = "CoreRAD prefix-specific settings";
-                    };
-                  }
-                );
-              };
-              options.routes = lib.mkOption {
-                description = "IPv6 routes added when this device starts";
-                default = [ ];
-                type = lib.types.listOf (
-                  lib.types.submodule {
-                    options.extraArgs = lib.mkOption {
-                      description = "Route args, i.e. everything after \"ip route add\"";
-                      type = with lib.types; either str (listOf anything);
-                    };
-                  }
-                );
-              };
-              options.kea = lib.mkOption {
-                description = "Kea options";
-                default = { };
-                type = lib.types.submodule {
-                  options.enable = lib.mkEnableOption "Kea for IPv6";
-                  options.extraArgs = lib.mkOption {
-                    type = with lib.types; listOf str;
-                    default = [ ];
-                    description = "List of additional arguments to pass to the daemon.";
-                  };
-                  options.configFile = lib.mkOption {
-                    type = with lib.types; nullOr path;
-                    default = null;
-                    description = "Kea config file (takes precedence over settings)";
-                  };
-                  options.settings = lib.mkOption {
-                    default = { };
-                    type = (pkgs.formats.json { }).type;
-                    description = "Kea settings";
-                  };
-                };
-              };
-              options.radvd = lib.mkOption {
-                description = "radvd options";
-                default = { };
-                type = lib.types.submodule {
-                  options.enable = lib.mkEnableOption "radvd";
-                  options.interfaceSettings = lib.mkOption {
-                    default = { };
-                    type =
-                      with lib.types;
-                      attrsOf (oneOf [
-                        bool
-                        str
-                        int
-                      ]);
-                    example = {
-                      UnicastOnly = true;
-                    };
-                    description = "radvd interface-specific settings";
-                  };
-                };
-              };
-              options.corerad = lib.mkOption {
-                description = "CoreRAD options";
-                default = { };
-                type = lib.types.submodule {
-                  options.enable = lib.mkEnableOption "CoreRAD";
-                  options.configFile = lib.mkOption {
-                    type = with lib.types; nullOr path;
-                    default = null;
-                    description = "CoreRAD config file (takes precedence over settings)";
-                  };
-                  options.interfaceSettings = lib.mkOption {
-                    default = { };
-                    type = (pkgs.formats.toml { }).type;
-                    description = "CoreRAD interface-specific settings";
-                  };
-                  options.settings = lib.mkOption {
-                    default = { };
-                    type = (pkgs.formats.toml { }).type;
-                    example = {
-                      debug.address = "localhost:9430";
-                      debug.prometheus = true;
-                    };
-                    description = "General CoreRAD settings";
-                  };
-                };
-              };
-            };
+            type = lib.types.submodule ipv6OptionsType;
           };
         }
       );
