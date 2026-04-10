@@ -54,6 +54,98 @@ let
         default = null;
       };
     };
+
+  ipv4OptionsType = {
+    options.enableForwarding = lib.mkEnableOption "Enable IPv4 forwarding for this device";
+    options.rpFilter = lib.mkOption {
+      description = "rp_filter value for this device (see kernel docs for more info)";
+      type = with lib.types; nullOr int;
+      default = null;
+    };
+    options.addresses = lib.mkOption {
+      description = "Device's IPv4 addresses";
+      default = [ ];
+      type = lib.types.listOf (
+        lib.types.submodule {
+          options.address = lib.mkOption {
+            description = "IPv4 address";
+            type = router-lib.types.ipv4;
+          };
+          options.prefixLength = lib.mkOption {
+            description = "IPv4 prefix length";
+            type = lib.types.int;
+          };
+          options.assign = lib.mkOption {
+            description = "Whether to assign this address to the device. Default: no if the first hextet is zero, yes otherwise.";
+            type = with lib.types; nullOr bool;
+            default = null;
+          };
+          options.gateways = lib.mkOption {
+            description = "IPv4 gateway addresses (optional)";
+            default = null;
+            type = with lib.types; nullOr (listOf str);
+          };
+          options.dns = lib.mkOption {
+            description = "IPv4 DNS servers associated with this device";
+            type = with lib.types; listOf str;
+            default = [ ];
+          };
+          options.keaSettings = lib.mkOption {
+            default = { };
+            type = (pkgs.formats.json { }).type;
+            example = {
+              pools = [ { pool = "192.168.1.15 - 192.168.1.200"; } ];
+              option-data = [
+                {
+                  name = "domain-name-servers";
+                  code = 6;
+                  csv-format = true;
+                  space = "dhcp4";
+                  data = "8.8.8.8, 8.8.4.4";
+                }
+              ];
+            };
+            description = "Kea IPv4 prefix-specific settings";
+          };
+        }
+      );
+    };
+    options.routes = lib.mkOption {
+      description = "IPv4 routes added when this device starts";
+      default = [ ];
+      type = lib.types.listOf (
+        lib.types.submodule {
+          options.extraArgs = lib.mkOption {
+            description = "Route args, i.e. everything after \"ip route add\"";
+            type = with lib.types; either str (listOf anything);
+          };
+        }
+      );
+    };
+    options.kea = lib.mkOption {
+      description = "Kea options";
+      default = { };
+      type = lib.types.submodule {
+        options.enable = lib.mkEnableOption "Kea for IPv4";
+        options.extraArgs = lib.mkOption {
+          type = with lib.types; listOf str;
+          default = [ ];
+          description = "List of additional arguments to pass to the daemon.";
+        };
+        options.configFile = lib.mkOption {
+          type = with lib.types; nullOr path;
+          default = null;
+          description = "Kea config file (takes precedence over settings)";
+        };
+        options.settings = lib.mkOption {
+          default = { };
+          type = (pkgs.formats.json { }).type;
+          description = "Kea settings";
+        };
+      };
+    };
+  };
+
   # a set of { <bridgeName> = [ <bridge interfaces> ]; }
   bridges = lib.zipAttrs (
     lib.mapAttrsToList (
@@ -266,96 +358,7 @@ in
           options.ipv4 = lib.mkOption {
             description = "IPv4 config";
             default = { };
-            type = lib.types.submodule {
-              options.enableForwarding = lib.mkEnableOption "Enable IPv4 forwarding for this device";
-              options.rpFilter = lib.mkOption {
-                description = "rp_filter value for this device (see kernel docs for more info)";
-                type = with lib.types; nullOr int;
-                default = null;
-              };
-              options.addresses = lib.mkOption {
-                description = "Device's IPv4 addresses";
-                default = [ ];
-                type = lib.types.listOf (
-                  lib.types.submodule {
-                    options.address = lib.mkOption {
-                      description = "IPv4 address";
-                      type = router-lib.types.ipv4;
-                    };
-                    options.prefixLength = lib.mkOption {
-                      description = "IPv4 prefix length";
-                      type = lib.types.int;
-                    };
-                    options.assign = lib.mkOption {
-                      description = "Whether to assign this address to the device. Default: no if the first hextet is zero, yes otherwise.";
-                      type = with lib.types; nullOr bool;
-                      default = null;
-                    };
-                    options.gateways = lib.mkOption {
-                      description = "IPv4 gateway addresses (optional)";
-                      default = null;
-                      type = with lib.types; nullOr (listOf str);
-                    };
-                    options.dns = lib.mkOption {
-                      description = "IPv4 DNS servers associated with this device";
-                      type = with lib.types; listOf str;
-                      default = [ ];
-                    };
-                    options.keaSettings = lib.mkOption {
-                      default = { };
-                      type = (pkgs.formats.json { }).type;
-                      example = {
-                        pools = [ { pool = "192.168.1.15 - 192.168.1.200"; } ];
-                        option-data = [
-                          {
-                            name = "domain-name-servers";
-                            code = 6;
-                            csv-format = true;
-                            space = "dhcp4";
-                            data = "8.8.8.8, 8.8.4.4";
-                          }
-                        ];
-                      };
-                      description = "Kea IPv4 prefix-specific settings";
-                    };
-                  }
-                );
-              };
-              options.routes = lib.mkOption {
-                description = "IPv4 routes added when this device starts";
-                default = [ ];
-                type = lib.types.listOf (
-                  lib.types.submodule {
-                    options.extraArgs = lib.mkOption {
-                      description = "Route args, i.e. everything after \"ip route add\"";
-                      type = with lib.types; either str (listOf anything);
-                    };
-                  }
-                );
-              };
-              options.kea = lib.mkOption {
-                description = "Kea options";
-                default = { };
-                type = lib.types.submodule {
-                  options.enable = lib.mkEnableOption "Kea for IPv4";
-                  options.extraArgs = lib.mkOption {
-                    type = with lib.types; listOf str;
-                    default = [ ];
-                    description = "List of additional arguments to pass to the daemon.";
-                  };
-                  options.configFile = lib.mkOption {
-                    type = with lib.types; nullOr path;
-                    default = null;
-                    description = "Kea config file (takes precedence over settings)";
-                  };
-                  options.settings = lib.mkOption {
-                    default = { };
-                    type = (pkgs.formats.json { }).type;
-                    description = "Kea settings";
-                  };
-                };
-              };
-            };
+            type = lib.types.submodule ipv4OptionsType;
           };
           options.ipv6 = lib.mkOption {
             description = "IPv6 config";
