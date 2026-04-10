@@ -9,10 +9,11 @@
 
 let
   cfg = config.router;
+  allInterfaces = cfg.interfaces // cfg.vlans;
 in
 {
   config =
-    lib.mkIf (cfg.enable && builtins.any (x: x.ipv6.radvd.enable) (builtins.attrValues cfg.interfaces))
+    lib.mkIf (cfg.enable && builtins.any (x: x.ipv6.radvd.enable) (builtins.attrValues allInterfaces))
       {
         users.users.radvd = {
           isSystemUser = true;
@@ -21,7 +22,7 @@ in
         };
         users.groups.radvd = { };
 
-        systemd.services = lib.flip lib.mapAttrs' cfg.interfaces (
+        systemd.services = lib.flip lib.mapAttrs' allInterfaces (
           interface: icfg:
           let
             ifaceOpts = {

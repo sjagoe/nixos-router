@@ -595,6 +595,30 @@ in
               ''''';
             type = lib.types.lines;
           };
+          options.hostapd = lib.mkOption {
+            description = "hostapd options";
+            default = { };
+            type = lib.types.submodule {
+              options.enable = lib.mkEnableOption "hostapd";
+              options.settings = lib.mkOption {
+                description = "hostapd config";
+                default = { };
+                type = lib.types.attrs;
+              };
+            };
+          };
+          options.dhcpcd = lib.mkOption {
+            description = "dhcpcd options";
+            default = { };
+            type = lib.types.submodule {
+              options.enable = lib.mkEnableOption "dhcpcd (this option disables networking.useDHCP)";
+              options.extraConfig = lib.mkOption {
+                description = "dhcpcd text config";
+                default = "";
+                type = lib.types.lines;
+              };
+            };
+          };
           options.ipv4 = lib.mkOption {
             description = "IPv4 config";
             default = { };

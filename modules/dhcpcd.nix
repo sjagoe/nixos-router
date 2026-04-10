@@ -9,6 +9,7 @@
 
 let
   cfg = config.router;
+  allInterfaces = cfg.interfaces // cfg.vlans;
   exitHook = pkgs.writeText "dhcpcd.exit-hook" ''
     if [ "$reason" = BOUND -o "$reason" = REBOOT ]; then
         # Restart ntpd.  We need to restart it to make sure that it
@@ -23,7 +24,7 @@ let
 in
 {
   config =
-    lib.mkIf (cfg.enable && builtins.any (x: x.dhcpcd.enable) (builtins.attrValues cfg.interfaces))
+    lib.mkIf (cfg.enable && builtins.any (x: x.dhcpcd.enable) (builtins.attrValues allInterfaces))
       {
         users.users.dhcpcd = {
           isSystemUser = true;
@@ -37,10 +38,10 @@ in
           lib.mapAttrsToList (interface: icfg: ''
             # Tell dhcpcd to rebind its interfaces if it's running.
             /run/current-system/systemd/bin/systemctl reload "dhcpcd-${utils.escapeSystemdPath interface}.service"
-          '') cfg.interfaces
+          '') allInterfaces
         );
 
-        systemd.services = lib.flip lib.mapAttrs' cfg.interfaces (
+        systemd.services = lib.flip lib.mapAttrs' allInterfaces (
           interface: icfg:
           let
             dhcpcdConf = pkgs.writeText "dhcpcd-${interface}.conf" ''

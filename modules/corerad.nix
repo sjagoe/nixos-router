@@ -9,10 +9,11 @@
 
 let
   cfg = config.router;
+  allInterfaces = cfg.interfaces // cfg.vlans;
 in
 {
   config = lib.mkIf cfg.enable {
-    systemd.services = lib.flip lib.mapAttrs' cfg.interfaces (
+    systemd.services = lib.flip lib.mapAttrs' allInterfaces (
       interface: icfg:
       let
         cfg = icfg.ipv6.corerad;

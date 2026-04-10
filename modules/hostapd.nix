@@ -10,14 +10,15 @@
 let
   cfg = config.router;
   hostapd = pkgs.hostapd;
+  allInterfaces = cfg.interfaces // cfg.vlans;
 in
 {
   config =
-    lib.mkIf (cfg.enable && builtins.any (x: x.hostapd.enable) (builtins.attrValues cfg.interfaces))
+    lib.mkIf (cfg.enable && builtins.any (x: x.hostapd.enable) (builtins.attrValues allInterfaces))
       {
         environment.systemPackages = [ hostapd ] ++ (with pkgs; [ wirelesstools ]);
         hardware.wirelessRegulatoryDatabase = true;
-        systemd.services = lib.flip lib.mapAttrs' cfg.interfaces (
+        systemd.services = lib.flip lib.mapAttrs' allInterfaces (
           interface: icfg:
           let
             escapedInterface = utils.escapeSystemdPath interface;
