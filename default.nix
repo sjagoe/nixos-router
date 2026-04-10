@@ -870,7 +870,10 @@ in
                 before = [ "network-setup.service" ];
                 serviceConfig.Type = "oneshot";
                 serviceConfig.RemainAfterExit = true;
-                path = [ pkgs.iproute2 ];
+                path = [
+                  pkgs.iproute2
+                  pkgs.sysctl
+                ];
               script = interfaceStartScript interface vcfg ips routes4 routes6;
               preStop = interfacePreStopScript interface vcfg;
               };
