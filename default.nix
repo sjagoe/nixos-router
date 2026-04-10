@@ -782,14 +782,6 @@ in
       // lib.flip lib.mapAttrs' cfg.vlans (interface: vcfg:
         let
           escapedInterface = utils.escapeSystemdPath interface;
-          ips =
-            (builtins.filter (
-              x: x.assign == true || (x.assign == null && !(lib.hasPrefix "0." x.address))
-            ) vcfg.ipv4.addresses);
-          routeFlags =
-            x:
-            if builtins.isList x.extraArgs then lib.escapeShellArgs (map toString x.extraArgs) else x.extraArgs;
-          routes4 = map routeFlags vcfg.ipv4.routes;
         in
         {
           name = "${escapedInterface}-netdev";
