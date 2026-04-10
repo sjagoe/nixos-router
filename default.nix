@@ -386,6 +386,67 @@ let
   router-lib = import ./lib.nix {
     inherit lib config utils;
   };
+
+  interfaceStartScript = interface: icfg: ips: routes4: routes6: ''
+    ${icfg.extraInitCommands}
+
+    state="/run/nixos/network/addresses/${interface}"
+    mkdir -p $(dirname "$state")
+    ${lib.optionalString ((icfg.bridge or null) != null && !(icfg.hostapd.enable or false)) ''
+      ip link set "${interface}" master "${icfg.bridge.name}" up && echo "${interface} " >> "/run/${icfg.bridge.name}.interfaces" || true
+    ''}
+    ip link set "${interface}" up
+    ${lib.flip lib.concatMapStrings ips (
+      ip:
+      let
+        cidr = "${ip.address}/${toString ip.prefixLength}";
+      in
+      ''
+        echo "${cidr}" >> $state
+        echo -n "adding address ${cidr}... "
+        if out=$(ip addr add "${cidr}" dev "${interface}" 2>&1); then
+          echo "done"
+        elif ! echo "$out" | grep "File exists" >/dev/null 2>&1; then
+          echo "'ip addr add "${cidr}" dev "${interface}"' failed: $out"
+          exit 1
+        fi
+      ''
+    )}
+    state="/run/nixos/network/routes/${interface}"
+    mkdir -p $(dirname "$state")
+    echo -n "" > "$state"
+    ${lib.concatMapStrings (route: ''
+      echo -n "adding route ${route}... "
+      if out=$(ip -4 route add ${route} 2>&1 && echo ${
+        lib.escapeShellArg ("ip -4 route del " + route)
+      } >> "$state"); then
+        echo "done"
+      elif ! echo "$out" | grep "File exists" >/dev/null 2>&1; then
+        echo "'ip -4 route add "${lib.escapeShellArg route}"' failed: $out"
+        exit 1
+      fi
+    '') routes4}
+    ${lib.concatMapStrings (route: ''
+      echo -n "adding route ${route}... "
+      if out=$(ip -6 route add ${route} 2>&1 && echo ${
+        lib.escapeShellArg ("ip -6 route del " + route)
+      } >> "$state"); then
+        echo "done"
+      elif ! echo "$out" | grep "File exists" >/dev/null 2>&1; then
+        echo "'ip -6 route add "${lib.escapeShellArg route}"' failed: $out"
+        exit 1
+      fi
+    '') routes6}
+    ${lib.optionalString (icfg.ipv4.rpFilter != null) ''
+      sysctl ${lib.escapeShellArg "net.ipv4.conf.${interface}.rp_filter=${toString icfg.ipv4.rpFilter}"}
+    ''}
+    ${lib.optionalString icfg.ipv4.enableForwarding ''
+      sysctl ${lib.escapeShellArg "net.ipv4.conf.${interface}.forwarding=1"}
+    ''}
+    ${lib.optionalString icfg.ipv6.enableForwarding ''
+      sysctl ${lib.escapeShellArg "net.ipv6.conf.${interface}.forwarding=1"}
+    ''}
+  '';
 in
 {
   imports = [
@@ -694,66 +755,7 @@ in
                 pkgs.iproute2
                 pkgs.sysctl
               ];
-              script = ''
-                ${icfg.extraInitCommands}
-
-                state="/run/nixos/network/addresses/${interface}"
-                mkdir -p $(dirname "$state")
-                ${lib.optionalString (icfg.bridge != null && !icfg.hostapd.enable) ''
-                  ip link set "${interface}" master "${icfg.bridge.name}" up && echo "${interface} " >> "/run/${icfg.bridge.name}.interfaces" || true
-                ''}
-                ip link set "${interface}" up
-                ${lib.flip lib.concatMapStrings ips (
-                  ip:
-                  let
-                    cidr = "${ip.address}/${toString ip.prefixLength}";
-                  in
-                  ''
-                    echo "${cidr}" >> $state
-                    echo -n "adding address ${cidr}... "
-                    if out=$(ip addr add "${cidr}" dev "${interface}" 2>&1); then
-                      echo "done"
-                    elif ! echo "$out" | grep "File exists" >/dev/null 2>&1; then
-                      echo "'ip addr add "${cidr}" dev "${interface}"' failed: $out"
-                      exit 1
-                    fi
-                  ''
-                )}
-                state="/run/nixos/network/routes/${interface}"
-                mkdir -p $(dirname "$state")
-                echo -n "" > "$state"
-                ${lib.concatMapStrings (route: ''
-                  echo -n "adding route ${route}... "
-                  if out=$(ip -4 route add ${route} 2>&1 && echo ${
-                    lib.escapeShellArg ("ip -4 route del " + route)
-                  } >> "$state"); then
-                    echo "done"
-                  elif ! echo "$out" | grep "File exists" >/dev/null 2>&1; then
-                    echo "'ip -4 route add "${lib.escapeShellArg route}"' failed: $out"
-                    exit 1
-                  fi
-                '') routes4}
-                ${lib.concatMapStrings (route: ''
-                  echo -n "adding route ${route}... "
-                  if out=$(ip -6 route add ${route} 2>&1 && echo ${
-                    lib.escapeShellArg ("ip -6 route del " + route)
-                  } >> "$state"); then
-                    echo "done"
-                  elif ! echo "$out" | grep "File exists" >/dev/null 2>&1; then
-                    echo "'ip -6 route add "${lib.escapeShellArg route}"' failed: $out"
-                    exit 1
-                  fi
-                '') routes6}
-                ${lib.optionalString (icfg.ipv4.rpFilter != null) ''
-                  sysctl ${lib.escapeShellArg "net.ipv4.conf.${interface}.rp_filter=${toString icfg.ipv4.rpFilter}"}
-                ''}
-                ${lib.optionalString icfg.ipv4.enableForwarding ''
-                  sysctl ${lib.escapeShellArg "net.ipv4.conf.${interface}.forwarding=1"}
-                ''}
-                ${lib.optionalString icfg.ipv6.enableForwarding ''
-                  sysctl ${lib.escapeShellArg "net.ipv6.conf.${interface}.forwarding=1"}
-                ''}
-              '';
+              script = interfaceStartScript interface icfg ips routes4 routes6;
               preStop = ''
                 state="/run/nixos/network/routes/${interface}"
                 ${lib.optionalString (icfg.bridge != null && !icfg.hostapd.enable) ''
@@ -826,11 +828,17 @@ in
           ips =
             (builtins.filter (
               x: x.assign == true || (x.assign == null && !(lib.hasPrefix "0." x.address))
-            ) vcfg.ipv4.addresses);
+            ) vcfg.ipv4.addresses)
+            ++ (builtins.filter (
+              x:
+              x.assign == true
+              || (x.assign == null && !(lib.hasPrefix ":" x.address || lib.hasPrefix "0:" x.address))
+            ) vcfg.ipv6.addresses);
           routeFlags =
             x:
             if builtins.isList x.extraArgs then lib.escapeShellArgs (map toString x.extraArgs) else x.extraArgs;
           routes4 = map routeFlags vcfg.ipv4.routes;
+          routes6 = map routeFlags vcfg.ipv6.routes;
         in
         {
           name = "network-addresses-${escapedInterface}";
@@ -856,47 +864,7 @@ in
                 serviceConfig.Type = "oneshot";
                 serviceConfig.RemainAfterExit = true;
                 path = [ pkgs.iproute2 ];
-              script = ''
-                state="/run/nixos/network/addresses/${interface}"
-                mkdir -p $(dirname "$state")
-                ip link set "${interface}" up
-                ${lib.flip lib.concatMapStrings ips (
-                  ip:
-                  let
-                    cidr = "${ip.address}/${toString ip.prefixLength}";
-                  in
-                  ''
-                    echo "${cidr}" >> $state
-                    echo -n "adding address ${cidr}... "
-                    if out=$(ip addr add "${cidr}" dev "${interface}" 2>&1); then
-                      echo "done"
-                    elif ! echo "$out" | grep "File exists" >/dev/null 2>&1; then
-                      echo "'ip addr add "${cidr}" dev "${interface}"' failed: $out"
-                      exit 1
-                    fi
-                  ''
-                )}
-                state="/run/nixos/network/routes/${interface}"
-                mkdir -p $(dirname "$state")
-                echo -n "" > "$state"
-                ${lib.concatMapStrings (route: ''
-                  echo -n "adding route ${route}... "
-                  if out=$(ip -4 route add ${route} 2>&1 && echo ${
-                    lib.escapeShellArg ("ip -4 route del " + route)
-                  } >> "$state"); then
-                    echo "done"
-                  elif ! echo "$out" | grep "File exists" >/dev/null 2>&1; then
-                    echo "'ip -4 route add "${lib.escapeShellArg route}"' failed: $out"
-                    exit 1
-                  fi
-                '') routes4}
-                ${lib.optionalString (vcfg.ipv4.rpFilter != null) ''
-                  sysctl ${lib.escapeShellArg "net.ipv4.conf.${interface}.rp_filter=${toString vcfg.ipv4.rpFilter}"}
-                ''}
-                ${lib.optionalString vcfg.ipv4.enableForwarding ''
-                  sysctl ${lib.escapeShellArg "net.ipv4.conf.${interface}.forwarding=1"}
-                ''}
-              '';
+              script = interfaceStartScript interface vcfg ips routes4 routes6;
               preStop = ''
                 state="/run/nixos/network/routes/${interface}"
                 if [ -e "$state" ]; then
