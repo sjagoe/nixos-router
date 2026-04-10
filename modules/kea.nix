@@ -59,13 +59,15 @@ let
     StateDirectory = "kea";
     UMask = "0077";
   };
+
+  keaInterfaces = cfg.interfaces // cfg.vlans;
 in
 {
   config = lib.mkIf cfg.enable (
     lib.mkMerge [
       (
         let
-          configs = lib.flip builtins.mapAttrs cfg.interfaces (
+          configs = lib.flip builtins.mapAttrs keaInterfaces (
             interface: icfg:
             let
               cfg4 = icfg.ipv4.kea;
@@ -144,9 +146,9 @@ in
             value = lib.mkIf (icfg.ipv4.kea.enable && icfg.ipv4.addresses != [ ]) {
               source = configs.${interface};
             };
-          }) cfg.interfaces;
+          }) keaInterfaces;
 
-          systemd.services = lib.flip lib.mapAttrs' cfg.interfaces (
+          systemd.services = lib.flip lib.mapAttrs' keaInterfaces (
             interface: icfg: {
               name = "kea-dhcp4-server-${utils.escapeSystemdPath interface}";
               value = lib.mkIf (icfg.ipv4.kea.enable && icfg.ipv4.addresses != [ ]) (
@@ -195,7 +197,7 @@ in
       )
       (
         let
-          configs = lib.flip builtins.mapAttrs cfg.interfaces (
+          configs = lib.flip builtins.mapAttrs keaInterfaces (
             interface: icfg:
             let
               cfg6 = icfg.ipv6.kea;
@@ -264,9 +266,9 @@ in
             value = lib.mkIf (icfg.ipv6.kea.enable && icfg.ipv6.addresses != [ ]) {
               source = configs.${interface};
             };
-          }) cfg.interfaces;
+          }) keaInterfaces;
 
-          systemd.services = lib.flip lib.mapAttrs' cfg.interfaces (
+          systemd.services = lib.flip lib.mapAttrs' keaInterfaces (
             interface: icfg: {
               name = "kea-dhcp6-server-${utils.escapeSystemdPath interface}";
               value = lib.mkIf (icfg.ipv6.kea.enable && icfg.ipv6.addresses != [ ]) (
