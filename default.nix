@@ -264,6 +264,27 @@ in
         }
       );
     };
+    vlans = lib.mkOption {
+      default = { };
+      description = "All VLAN interfaces managed by nixos-router";
+      type = lib.types.attrsOf (
+        lib.types.submodule {
+          options.vid = lib.mkOption {
+            description = "VLAN id";
+            type = lib.types.int;
+          };
+          options.parent = lib.mkOption {
+            description = "Parent interface of this vlan";
+            type = lib.types.str;
+          };
+          options.ipv4 = lib.mkOption {
+            description = "IPv4 config";
+            default = { };
+            type = lib.types.submodule ipv4OptionsType;
+          };
+        }
+      );
+    };
     interfaces = lib.mkOption {
       default = { };
       description = "All interfaces managed by nixos-router";
@@ -754,6 +775,55 @@ in
                 fi
               '';
             };
+        }
+      )
+      // lib.flip lib.mapAttrs' cfg.vlans (interface: vcfg:
+        let
+          escapedInterface = utils.escapeSystemdPath interface;
+          ips =
+            (builtins.filter (
+              x: x.assign == true || (x.assign == null && !(lib.hasPrefix "0." x.address))
+            ) vcfg.ipv4.addresses);
+          routeFlags =
+            x:
+            if builtins.isList x.extraArgs then lib.escapeShellArgs (map toString x.extraArgs) else x.extraArgs;
+          routes4 = map routeFlags vcfg.ipv4.routes;
+        in
+        {
+          name = "${escapedInterface}-netdev";
+          value =
+            router-lib.mkServiceForIf'
+              {
+                inherit interface;
+                includeBasicDeps = false;
+              }
+              {
+                description = "VLAN Interface ${interface}";
+                wantedBy = [
+                  "network-setup.service"
+                  "network.target"
+                  "sys-subsystem-net-devices-${escapedInterface}.device"
+                ];
+                partOf = [ "network-setup.service" ];
+                after =
+                  [ "network-pre.target" ]
+                  # soft dependency, order it but don't require
+                  ++ map router-lib.mainDepForIf vcfg.parent;
+                before = [ "network-setup.service" ];
+                serviceConfig.Type = "oneshot";
+                serviceConfig.RemainAfterExit = true;
+                path = [ pkgs.iproute2 ];
+                script = ''
+                  ip link show dev "${interface}" >/dev/null 2>&1 && ip link del "${interface}" || true
+                  echo "Creating vlan interface ${interface}..."
+                  ip link add link "${vcfg.parent}" name "${interface}" type vlan id "${vcfg.vid}"
+                  ip link set "${interface}" up
+                '';
+                postStop = ''
+                  ip link set "${interface}" down || true
+                  ip link del "${interface}" || true
+                '';
+              };
         }
       )
       // lib.flip lib.mapAttrs' bridges (
