@@ -808,7 +808,7 @@ in
                 after =
                   [ "network-pre.target" ]
                   # soft dependency, order it but don't require
-                  ++ map router-lib.mainDepForIf vcfg.parent;
+                  ++ [ (router-lib.mainDepForIf vcfg.parent) ];
                 before = [ "network-setup.service" ];
                 serviceConfig.Type = "oneshot";
                 serviceConfig.RemainAfterExit = true;
