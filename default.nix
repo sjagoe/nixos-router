@@ -591,6 +591,11 @@ in
             default = { };
             type = lib.types.submodule ipv4OptionsType;
           };
+          options.ipv6 = lib.mkOption {
+            description = "IPv4 config";
+            default = { };
+            type = lib.types.submodule ipv6OptionsType;
+          };
         }
       );
     };
