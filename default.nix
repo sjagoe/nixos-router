@@ -816,7 +816,7 @@ in
                 script = ''
                   ip link show dev "${interface}" >/dev/null 2>&1 && ip link del "${interface}" || true
                   echo "Creating vlan interface ${interface}..."
-                  ip link add link "${vcfg.parent}" name "${interface}" type vlan id "${vcfg.vid}"
+                  ip link add link "${vcfg.parent}" name "${interface}" type vlan id "${builtins.toString vcfg.vid}"
                   ip link set "${interface}" up
                 '';
                 postStop = ''
