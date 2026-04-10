@@ -388,7 +388,7 @@ let
   };
 
   interfaceStartScript = interface: icfg: ips: routes4: routes6: ''
-    ${icfg.extraInitCommands}
+    ${icfg.extraInitCommands or ""}
 
     state="/run/nixos/network/addresses/${interface}"
     mkdir -p $(dirname "$state")
