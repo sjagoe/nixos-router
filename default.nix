@@ -447,6 +447,29 @@ let
       sysctl ${lib.escapeShellArg "net.ipv6.conf.${interface}.forwarding=1"}
     ''}
   '';
+
+  interfacePreStopScript = interface: icfg: ''
+    state="/run/nixos/network/routes/${interface}"
+    ${lib.optionalString ((icfg.bridge or null) != null && !(icfg.hostapd.enable or false)) ''
+      ip link set "${interface}" nomaster up && echo "${interface} " >> "/run/${icfg.bridge.name}.interfaces" || true
+    ''}
+    if [ -e "$state" ]; then
+      while read cmd; do
+        echo -n "running route delete command $cmd... "
+        $cmd >/dev/null 2>&1 && echo "done" || echo "failed"
+      done < "$state"
+      rm -f "$state"
+    fi
+
+    state="/run/nixos/network/addresses/${interface}"
+    if [ -e "$state" ]; then
+      while read cidr; do
+        echo -n "deleting address $cidr... "
+        ip addr del "$cidr" dev "${interface}" >/dev/null 2>&1 && echo "done" || echo "failed"
+      done < "$state"
+      rm -f "$state"
+    fi
+  '';
 in
 {
   imports = [
@@ -756,28 +779,7 @@ in
                 pkgs.sysctl
               ];
               script = interfaceStartScript interface icfg ips routes4 routes6;
-              preStop = ''
-                state="/run/nixos/network/routes/${interface}"
-                ${lib.optionalString (icfg.bridge != null && !icfg.hostapd.enable) ''
-                  ip link set "${interface}" nomaster up && echo "${interface} " >> "/run/${icfg.bridge.name}.interfaces" || true
-                ''}
-                if [ -e "$state" ]; then
-                  while read cmd; do
-                    echo -n "running route delete command $cmd... "
-                    $cmd >/dev/null 2>&1 && echo "done" || echo "failed"
-                  done < "$state"
-                  rm -f "$state"
-                fi
-
-                state="/run/nixos/network/addresses/${interface}"
-                if [ -e "$state" ]; then
-                  while read cidr; do
-                    echo -n "deleting address $cidr... "
-                    ip addr del "$cidr" dev "${interface}" >/dev/null 2>&1 && echo "done" || echo "failed"
-                  done < "$state"
-                  rm -f "$state"
-                fi
-              '';
+              preStop = interfacePreStopScript interface icfg;
             };
         }
       )
@@ -865,25 +867,7 @@ in
                 serviceConfig.RemainAfterExit = true;
                 path = [ pkgs.iproute2 ];
               script = interfaceStartScript interface vcfg ips routes4 routes6;
-              preStop = ''
-                state="/run/nixos/network/routes/${interface}"
-                if [ -e "$state" ]; then
-                  while read cmd; do
-                    echo -n "running route delete command $cmd... "
-                    $cmd >/dev/null 2>&1 && echo "done" || echo "failed"
-                  done < "$state"
-                  rm -f "$state"
-                fi
-
-                state="/run/nixos/network/addresses/${interface}"
-                if [ -e "$state" ]; then
-                  while read cidr; do
-                    echo -n "deleting address $cidr... "
-                    ip addr del "$cidr" dev "${interface}" >/dev/null 2>&1 && echo "done" || echo "failed"
-                  done < "$state"
-                  rm -f "$state"
-                fi
-              '';
+              preStop = interfacePreStopScript interface vcfg;
               };
         }
       )
