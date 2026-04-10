@@ -438,13 +438,13 @@ let
       fi
     '') routes6}
     ${lib.optionalString (icfg.ipv4.rpFilter != null) ''
-      sysctl ${lib.escapeShellArg "net.ipv4.conf.${interface}.rp_filter=${toString icfg.ipv4.rpFilter}"}
+      sysctl ${lib.escapeShellArg "net.ipv4.conf.${lib.replaceStrings ["."] ["/"] interface}.rp_filter=${toString icfg.ipv4.rpFilter}"}
     ''}
     ${lib.optionalString icfg.ipv4.enableForwarding ''
-      sysctl ${lib.escapeShellArg "net.ipv4.conf.${interface}.forwarding=1"}
+      sysctl ${lib.escapeShellArg "net.ipv4.conf.${lib.replaceStrings ["."] ["/"] interface}.forwarding=1"}
     ''}
     ${lib.optionalString icfg.ipv6.enableForwarding ''
-      sysctl ${lib.escapeShellArg "net.ipv6.conf.${interface}.forwarding=1"}
+      sysctl ${lib.escapeShellArg "net.ipv6.conf.${lib.replaceStrings ["."] ["/"] interface}.forwarding=1"}
     ''}
   '';
 
