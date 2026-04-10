@@ -826,6 +826,105 @@ in
               };
         }
       )
+      // lib.flip lib.mapAttrs' cfg.vlans (interface: vcfg:
+        let
+          escapedInterface = utils.escapeSystemdPath interface;
+          ips =
+            (builtins.filter (
+              x: x.assign == true || (x.assign == null && !(lib.hasPrefix "0." x.address))
+            ) vcfg.ipv4.addresses);
+          routeFlags =
+            x:
+            if builtins.isList x.extraArgs then lib.escapeShellArgs (map toString x.extraArgs) else x.extraArgs;
+          routes4 = map routeFlags vcfg.ipv4.routes;
+        in
+        {
+          name = "network-addresses-${escapedInterface}";
+          value =
+            router-lib.mkServiceForIf'
+              {
+                inherit interface;
+                includeBasicDeps = false;
+              }
+              {
+                description = "VLAN Interface ${interface}";
+                wantedBy = [
+                  "network-setup.service"
+                  "network.target"
+                  "sys-subsystem-net-devices-${escapedInterface}.device"
+                ];
+                partOf = [ "network-setup.service" ];
+                after =
+                  [ "network-pre.target" ]
+                  ++ [ "${escapedInterface}-netdev.service" ];
+                requires = [ "${escapedInterface}-netdev.service" ];
+                before = [ "network-setup.service" ];
+                serviceConfig.Type = "oneshot";
+                serviceConfig.RemainAfterExit = true;
+                path = [ pkgs.iproute2 ];
+              script = ''
+                state="/run/nixos/network/addresses/${interface}"
+                mkdir -p $(dirname "$state")
+                ip link set "${interface}" up
+                ${lib.flip lib.concatMapStrings ips (
+                  ip:
+                  let
+                    cidr = "${ip.address}/${toString ip.prefixLength}";
+                  in
+                  ''
+                    echo "${cidr}" >> $state
+                    echo -n "adding address ${cidr}... "
+                    if out=$(ip addr add "${cidr}" dev "${interface}" 2>&1); then
+                      echo "done"
+                    elif ! echo "$out" | grep "File exists" >/dev/null 2>&1; then
+                      echo "'ip addr add "${cidr}" dev "${interface}"' failed: $out"
+                      exit 1
+                    fi
+                  ''
+                )}
+                state="/run/nixos/network/routes/${interface}"
+                mkdir -p $(dirname "$state")
+                echo -n "" > "$state"
+                ${lib.concatMapStrings (route: ''
+                  echo -n "adding route ${route}... "
+                  if out=$(ip -4 route add ${route} 2>&1 && echo ${
+                    lib.escapeShellArg ("ip -4 route del " + route)
+                  } >> "$state"); then
+                    echo "done"
+                  elif ! echo "$out" | grep "File exists" >/dev/null 2>&1; then
+                    echo "'ip -4 route add "${lib.escapeShellArg route}"' failed: $out"
+                    exit 1
+                  fi
+                '') routes4}
+                ${lib.optionalString (vcfg.ipv4.rpFilter != null) ''
+                  sysctl ${lib.escapeShellArg "net.ipv4.conf.${interface}.rp_filter=${toString vcfg.ipv4.rpFilter}"}
+                ''}
+                ${lib.optionalString vcfg.ipv4.enableForwarding ''
+                  sysctl ${lib.escapeShellArg "net.ipv4.conf.${interface}.forwarding=1"}
+                ''}
+              '';
+              preStop = ''
+                state="/run/nixos/network/routes/${interface}"
+                if [ -e "$state" ]; then
+                  while read cmd; do
+                    echo -n "running route delete command $cmd... "
+                    $cmd >/dev/null 2>&1 && echo "done" || echo "failed"
+                  done < "$state"
+                  rm -f "$state"
+                fi
+
+                state="/run/nixos/network/addresses/${interface}"
+                if [ -e "$state" ]; then
+                  while read cidr; do
+                    echo -n "deleting address $cidr... "
+                    ip addr del "$cidr" dev "${interface}" >/dev/null 2>&1 && echo "done" || echo "failed"
+                  done < "$state"
+                  rm -f "$state"
+                fi
+              '';
+              };
+        }
+      )
       // lib.flip lib.mapAttrs' bridges (
         interface: value:
         let
