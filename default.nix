@@ -844,7 +844,7 @@ in
                 after =
                   [ "network-pre.target" ]
                   # soft dependency, order it but don't require
-                  ++ [ (router-lib.mainDepForIf vcfg.parent) ];
+                  ++ [ ("network-addresses-${utils.escapeSystemdPath vcfg.parent}.service") ];
                 before = [ "network-setup.service" ];
                 serviceConfig.Type = "oneshot";
                 serviceConfig.RemainAfterExit = true;
