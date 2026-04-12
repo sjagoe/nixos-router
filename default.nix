@@ -889,7 +889,7 @@ in
                 includeBasicDeps = false;
               }
               {
-                description = "VLAN Interface ${interface}";
+                description = "Address configuration of ${interface}";
                 wantedBy = [
                   "network-setup.service"
                   "network.target"
