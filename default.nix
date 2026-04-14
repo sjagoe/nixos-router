@@ -903,6 +903,8 @@ in
                 before = [ "network-setup.service" ];
                 serviceConfig.Type = "oneshot";
                 serviceConfig.RemainAfterExit = true;
+                serviceConfig.Restart = "on-failure";
+                serviceConfig.RestartSec = "500ms";
                 path = [
                   pkgs.iproute2
                   pkgs.sysctl
